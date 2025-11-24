@@ -6,17 +6,13 @@ from core.utils.jwt_auth import JWTAuthentication
 
 
 class TachoViewSet(viewsets.ModelViewSet):
-    queryset = Tacho.objects.all()  # pylint: disable=no-member
+    queryset = Tacho.objects.all()
     serializer_class = TachoSerializer
     authentication_classes = [JWTAuthentication]
+
+    # Permite leer sin autenticación, pero crear solo si tiene token
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def perform_create(self, serializer):
-        user = getattr(self.request, "user", None)
-
-        # Si está autenticado, asignamos automáticamente el usuario
-        if user and user.is_authenticated:
-            serializer.save(usuario=user)
-        else:
-            serializer.save()
-
+        # Como el modelo Tacho NO tiene usuario, simplemente guardamos
+        serializer.save()
