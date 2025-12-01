@@ -19,7 +19,6 @@ class Usuario(AbstractBaseUser):
     rol = models.CharField(max_length=30, default="usuario")   # usuario | admin
     telefono = models.CharField(max_length=20, null=True, blank=True)
 
-    provincia = models.ForeignKey(Provincia, on_delete=models.SET_NULL, null=True)
     canton = models.ForeignKey(Canton, on_delete=models.SET_NULL, null=True)
 
     fecha_registro = models.DateField(auto_now_add=True)
