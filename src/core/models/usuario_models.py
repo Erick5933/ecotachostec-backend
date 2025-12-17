@@ -14,20 +14,38 @@ class UsuarioManager(BaseUserManager):
 
 
 class Usuario(AbstractBaseUser):
+
+    ROL_CHOICES = [
+        ("admin", "admin"),
+        ("user", "user"),
+    ]
+
     nombre = models.CharField(max_length=150)
     email = models.EmailField(unique=True)
-    rol = models.CharField(max_length=30, default="usuario")   # usuario | admin
+
+    rol = models.CharField(
+        max_length=30,
+        choices=ROL_CHOICES,
+        default="user"
+    )
+
     telefono = models.CharField(max_length=20, null=True, blank=True)
 
-    canton = models.ForeignKey(Canton, on_delete=models.SET_NULL, null=True)
+    canton = models.ForeignKey(
+        Canton,
+        on_delete=models.SET_NULL,
+        null=True
+    )
 
-    fecha_registro = models.DateField(auto_now_add=True)
+    ultimo_login = models.DateTimeField(null=True, blank=True)
+
     activo = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     objects = UsuarioManager()
 
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['nombre']
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["nombre"]
 
     def __str__(self):
-        return f"{self.nombre} ({self.email})"
+        return f"{self.nombre} ({self.rol})"
