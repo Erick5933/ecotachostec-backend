@@ -1,0 +1,6 @@
+# Dataset para YOLOv8 clasificación
+train: src/core/ai/dataset/train/images
+val: src/core/ai/dataset/valid/images
+
+nc: 3  # número de clases
+names: ["inorganico", "organico", "reciclable"]
