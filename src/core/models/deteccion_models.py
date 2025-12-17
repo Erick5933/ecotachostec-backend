@@ -7,6 +7,7 @@ class Deteccion(models.Model):
         ("organico", "Orgánico"),
         ("inorganico", "Inorgánico"),
         ("reciclable", "Reciclable"),
+        ("ninguno","No clasificado")
     ]
 
     tacho = models.ForeignKey(
@@ -15,36 +16,37 @@ class Deteccion(models.Model):
         related_name="detecciones"
     )
 
-    codigo = models.CharField(max_length=50)
+    usuario = models.ForeignKey(
+        "Usuario",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="detecciones"
+    )
+    # 👆 SOLO SE USA EN TACHOS PERSONALES
 
     clasificacion = models.CharField(
         max_length=20,
         choices=CLASIFICACION_CHOICES,
-        default="No definido"
+        default="ninguno"
     )
 
     confianza_ia = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        help_text="Porcentaje de certeza de la IA",
-        default=0.00
+        default=0
     )
 
     imagen = models.ImageField(
-        upload_to="detecciones/%Y/%m/%d/",
-        null=True,  # Añade esto si no es obligatorio
-        blank=True
+        upload_to="detecciones/%Y/%m/%d/"
     )
 
-    ubicacion_lat = models.DecimalField(max_digits=9, decimal_places=6, default=0.00)
-    ubicacion_lon = models.DecimalField(max_digits=9, decimal_places=6, default=0.00)
+    ubicacion_lat = models.DecimalField(max_digits=9, decimal_places=6)
+    ubicacion_lon = models.DecimalField(max_digits=9, decimal_places=6)
 
     descripcion = models.TextField(blank=True, null=True)
 
     procesado = models.BooleanField(default=True)
 
-    activo = models.BooleanField(default=True)
-    created_at = models.DateTimeField(null=True, blank=True)
-
-    def __str__(self):
-        return f"{self.codigo} - {self.clasificacion}"
+    activo = models.BooleanField(default=True)  # 🔴 borrado lógico
+    created_at = models.DateTimeField(auto_now_add=True)
