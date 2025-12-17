@@ -4,3 +4,11 @@ pymysql
 python-dotenv
 psycopg2-binary
 djangorestframework-simplejwt
+django-cors-headers
+cryptography
+ultralytics
+opencv-python
+torchvision
+numpy
+pillow
+requests
