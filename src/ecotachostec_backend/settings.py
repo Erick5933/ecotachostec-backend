@@ -123,3 +123,20 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# settings.py
+
+# ... (tu configuración existente)
+
+# -------------------- EMAIL (GMAIL) --------------------
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'kawsana375@gmail.com'
+# ⚠️ OJO: Aquí pon la contraseña de APLICACIÓN de 16 letras, NO tu contraseña normal.
+EMAIL_HOST_PASSWORD = 'bvgt qcgi onro ikgc' 
+DEFAULT_FROM_EMAIL = 'Ecotachos Tecnología <kawsana375@gmail.com>'
+
+# URL del Frontend (para enviar el link de recuperación)
+FRONTEND_URL = "http://localhost:5173"  # O tu IP si usas expo: "http://192.168.54.59:19000"
