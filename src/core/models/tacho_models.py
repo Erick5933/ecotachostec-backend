@@ -9,7 +9,12 @@ class Tacho(models.Model):
 
     codigo = models.CharField(max_length=50, unique=True)
     nombre = models.CharField(max_length=100)
-
+    empresa_nombre = models.CharField(
+        max_length=200, 
+        blank=True, 
+        null=True,
+        verbose_name="Nombre de la empresa/institución"
+    )
     tipo = models.CharField(
         max_length=20,
         choices=TIPO_CHOICES,
@@ -44,3 +49,6 @@ class Tacho(models.Model):
     activo = models.BooleanField(default=True)   # 🔴 borrado lógico
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+
+    
