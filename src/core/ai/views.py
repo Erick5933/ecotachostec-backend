@@ -9,8 +9,39 @@ import logging
 import base64
 import io
 import requests
+import os
+from pathlib import Path
+
+from .local_classifier import LocalClassifier
 
 logger = logging.getLogger(__name__)
+def resolve_weights_path() -> str:
+    """Resuelve la ruta del modelo .pt.
+
+    1) Usa AI_WEIGHTS del entorno si existe.
+    2) Busca automáticamente en <repo_root>/runs/classify/**/weights/best.pt y retorna el más reciente.
+    """
+    if AI_ENGINE != 'local':
+        return ''
+
+    if AI_WEIGHTS and os.path.exists(AI_WEIGHTS):
+        return AI_WEIGHTS
+
+    try:
+        repo_root = Path(__file__).resolve().parents[3]  # .../ecotachostec-backend2
+        candidates = list(repo_root.glob('runs/classify/**/weights/best.pt'))
+        if not candidates:
+            return ''
+        # elegir el más reciente por mtime
+        latest = max(candidates, key=lambda p: p.stat().st_mtime)
+        return str(latest)
+    except Exception:
+        return ''
+
+
+# ==================== CONFIGURACIÓN IA ====================
+AI_ENGINE = os.getenv('AI_ENGINE', 'local').lower()  # 'roboflow' | 'local'
+AI_WEIGHTS = os.getenv('AI_WEIGHTS', '').strip()  # Ruta a pesos locales (.pt) si AI_ENGINE='local'
 
 # ==================== CONFIGURACIÓN ROBOFLOW ====================
 ROBOFLOW_CONFIG = {
@@ -246,27 +277,44 @@ def process_roboflow_response(roboflow_result):
 @permission_classes([AllowAny])
 def ai_health(request):
     """Verifica el estado del servicio de IA"""
-    try:
-        response = requests.get(ROBOFLOW_CONFIG['api_url'], timeout=5)
-        roboflow_status = response.status_code == 200
-    except:
-        roboflow_status = False
-
-    return JsonResponse({
+    payload = {
         'status': 'operational',
-        'service': 'EcoTachosTec IA - Roboflow',
-        'roboflow_available': roboflow_status,
-        'workspace': ROBOFLOW_CONFIG['workspace'],
-        'workflow_id': ROBOFLOW_CONFIG['workflow_id'],
+        'engine': AI_ENGINE,
+        'service': f"EcoTachosTec IA - {'Local (Ultralytics)' if AI_ENGINE=='local' else 'Roboflow'}",
         'timestamp': timezone.now().isoformat(),
-        'message': '✅ Conectado a Roboflow' if roboflow_status else '⚠️ Roboflow no disponible'
-    })
+    }
+
+    if AI_ENGINE == 'local':
+        resolved = resolve_weights_path()
+        chosen = resolved or AI_WEIGHTS
+        payload.update({
+            'message': '✅ Motor local listo',
+            'weights': chosen,
+            'weights_exists': bool(chosen) and os.path.exists(chosen),
+            'categories': list(CATEGORY_INFO.keys()),
+        })
+    else:
+        try:
+            response = requests.get(ROBOFLOW_CONFIG['api_url'], timeout=5)
+            roboflow_available = response.status_code == 200
+        except Exception:
+            roboflow_available = False
+        payload.update({
+            'roboflow_available': roboflow_available,
+            'workspace': ROBOFLOW_CONFIG['workspace'],
+            'workflow_id': ROBOFLOW_CONFIG['workflow_id'],
+            'message': '✅ Conectado a Roboflow' if roboflow_available else '⚠️ Roboflow no disponible',
+        })
+
+    return JsonResponse(payload)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def ai_detect(request):
     """
-    Endpoint principal para detectar/clasificar residuos usando Roboflow
+    Endpoint principal para detectar/clasificar residuos
+    - roboflow: usa workflow remoto
+    - local: usa clasificador Ultralytics
     """
     try:
         imagen = None
@@ -313,30 +361,43 @@ def ai_detect(request):
                 "error": f"Error procesando imagen: {str(e)}"
             }, status=400)
 
-        # 4️⃣ Llamar a Roboflow
-        roboflow_result = detect_with_roboflow(img_base64)
-        
-        if not roboflow_result:
+        # Motor local SIEMPRE (reemplazo definitivo)
+        weights_path = resolve_weights_path()
+        if not weights_path or not os.path.exists(weights_path):
             return Response({
                 "success": False,
-                "error": "Error al conectar con Roboflow o no se obtuvieron resultados"
-            }, status=503)
+                "error": "Pesos locales no configurados. Defina AI_WEIGHTS en el entorno."
+            }, status=500)
 
-        # 5️⃣ Procesar resultado
-        processed_result = process_roboflow_response(roboflow_result)
-        
-        # ⚠️ Caso especial: No se detectó nada
-        if not processed_result.get("success") and processed_result.get("no_detection"):
-            logger.warning("⚠️ No se detectaron objetos en la imagen")
-            return Response(processed_result, status=200)  # ← 200 pero success=false
-        
-        if not processed_result.get("success"):
-            logger.error("❌ Error procesando la respuesta de Roboflow")
-            return Response(processed_result, status=500)
+        clf = LocalClassifier(weights_path)
+        img_pil = Image.open(io.BytesIO(base64.b64decode(img_base64))).convert('RGB')
+        pred = clf.predict_pil(img_pil)
+        categoria = pred['label']
+        confianza = pred['confidence']
 
-        # 6️⃣ Retornar resultado final
-        logger.info("✅ Clasificación exitosa")
-        return Response(processed_result)
+        categoria_map = {
+            "organicos": "organico",
+            "orgánico": "organico",
+            "organico": "organico",
+            "reciclables": "reciclable",
+            "reciclable": "reciclable",
+            "inorganicos": "inorganico",
+            "inorgánicos": "inorganico",
+            "inorganico": "inorganico",
+        }
+        categoria_std = categoria_map.get(categoria.lower(), categoria.lower())
+        category_info = CATEGORY_INFO.get(categoria_std, CATEGORY_INFO["inorganico"])
+
+        return Response({
+            "success": True,
+            "clasificacion_principal": {
+                "categoria": categoria_std,
+                "confianza": confianza
+            },
+            "category_info": category_info,
+            "top_predicciones": pred["top"],
+            "tipo": "clasificacion-local"
+        })
 
     except Exception as e:
         logger.exception(f"💥 Error crítico en ai_detect: {str(e)}")
@@ -355,16 +416,29 @@ def detectar_basura(request):
 @permission_classes([AllowAny])
 def ai_model_info(request):
     """Información sobre el modelo de IA"""
-    return JsonResponse({
-        'success': True,
-        'model': {
+    if AI_ENGINE == 'local':
+        resolved = resolve_weights_path()
+        chosen = resolved or AI_WEIGHTS
+        model_info = {
+            'type': 'local_ultralytics',
+            'weights': chosen,
+            'categories': list(CATEGORY_INFO.keys()),
+            'available': bool(chosen) and os.path.exists(chosen),
+        }
+    else:
+        model_info = {
             'type': 'roboflow_workflow',
             'workspace': ROBOFLOW_CONFIG['workspace'],
             'workflow_id': ROBOFLOW_CONFIG['workflow_id'],
             'categories': list(CATEGORY_INFO.keys()),
-            'available': True
-        },
-        'timestamp': timezone.now().isoformat()
+            'available': True,
+        }
+
+    return JsonResponse({
+        'success': True,
+        'engine': AI_ENGINE,
+        'model': model_info,
+        'timestamp': timezone.now().isoformat(),
     })
 
 # Compatibilidad con nombres antiguos

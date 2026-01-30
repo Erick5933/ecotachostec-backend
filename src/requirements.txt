@@ -12,3 +12,6 @@ torchvision
 numpy
 pillow
 requests
+drf-yasg
+whitenoise
+gunicorn

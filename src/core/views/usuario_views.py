@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from django.core.exceptions import ObjectDoesNotExist
 # Modelos y Serializers
@@ -9,16 +10,18 @@ from core.serializers.usuario_serializers import (
     UsuarioCreateSerializer, 
     LoginSerializer, 
     UsuarioSerializer,
+    UsuarioUpdateSerializer,
     PasswordResetSerializer, 
     SetNewPasswordSerializer
 )
 
 # Utils y Auth
 from core.utils.jwt_auth import JWTAuthentication, create_jwt_token
+from core.permissions import IsAdmin
 
-# Firebase
+# Firebase - Inicializar primero
+from core.utils import firebase_app
 from firebase_admin import auth
-from core.utils.firebase_app import firebase_admin
 
 # Para el correo
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
@@ -71,7 +74,8 @@ class GoogleLoginView(APIView):
 
         try:
             print("Verificando token con Firebase Admin...")
-            decoded_token = auth.verify_id_token(id_token)
+            # clock_skew_seconds=10 tolera desajustes de reloj de hasta 10 segundos
+            decoded_token = auth.verify_id_token(id_token, clock_skew_seconds=10)
             print(f"Token verificado. Email: {decoded_token.get('email')}")
             
             email = decoded_token.get('email')
@@ -185,9 +189,32 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     queryset = Usuario.objects.all()
     serializer_class = UsuarioSerializer
 
-    # 🔥 DESACTIVAMOS autenticación SOLO para pruebas
-    authentication_classes = []
-    permission_classes = []
+    # ✅ Solo admins autenticados pueden acceder
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdmin]
+    
+    def perform_destroy(self, instance):
+        """Eliminado lógico: marcar usuario como inactivo en lugar de borrar"""
+        instance.activo = False
+        instance.save()
+
+    def get_serializer_class(self):
+        """Usa UsuarioCreateSerializer para crear y actualizar, UsuarioSerializer para leer"""
+        if self.action == 'create':
+            return UsuarioCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            # Para PUT/PATCH, usa un serializer que maneje contraseña opcional
+            return UsuarioUpdateSerializer
+        return UsuarioSerializer
 
     def list(self, request):
         return super().list(request)
+
+    @action(detail=True, methods=["post", "patch"], url_path="reactivar")
+    def reactivar(self, request, pk=None):
+        """Reactivar usuario (soft-undelete)"""
+        user = self.get_object()
+        user.activo = True
+        user.save()
+        serializer = self.get_serializer(user)
+        return Response(serializer.data)
