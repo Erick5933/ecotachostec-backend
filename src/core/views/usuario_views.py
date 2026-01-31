@@ -49,11 +49,14 @@ class LoginAPIView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
+        print(f"📋 Datos recibidos: {request.data}")
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data["user"]
             token = create_jwt_token(user)
+            print(f"✅ Login exitoso para: {user.email}")
             return Response({"user": UsuarioSerializer(user).data, "token": token})
+        print(f"❌ Errores de validación: {serializer.errors}")
         return Response(serializer.errors, status=400)
 
 
@@ -101,8 +104,21 @@ class GoogleLoginView(APIView):
             })
 
         except Exception as e:
-            print(f"ERROR CRÍTICO FIREBASE: {str(e)}") 
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            error_msg = str(e)
+            print(f"ERROR CRÍTICO FIREBASE: {error_msg}") 
+            
+            # Si es error de configuración de Firebase, proporcionar instrucciones claras
+            if "project ID" in error_msg.lower():
+                return Response({
+                    'error': 'Firebase no configurado. Necesitas:',
+                    'instrucciones': [
+                        '1. Crear archivo firebase_credentials.json en src/',
+                        '2. O configurar variables de entorno: GOOGLE_CLOUD_PROJECT, FIREBASE_PRIVATE_KEY, etc.',
+                        '3. Consulta .env.example para más detalles'
+                    ]
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # -------------------- RECUPERACIÓN DE CONTRASEÑA --------------------

@@ -132,11 +132,25 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        # Usa 'email' ya que USERNAME_FIELD del modelo Usuario es "email"
-        user = authenticate(username=data["email"], password=data["password"])
+        email = data.get("email")
+        password = data.get("password")
 
-        if not user:
+        if not email or not password:
+            raise serializers.ValidationError("Email y contraseña son requeridos")
+
+        # Buscar usuario por email directamente
+        try:
+            user = Usuario.objects.get(email=email)
+        except Usuario.DoesNotExist:
             raise serializers.ValidationError("Credenciales inválidas")
+
+        # Verificar contraseña
+        if not user.check_password(password):
+            raise serializers.ValidationError("Credenciales inválidas")
+
+        # Verificar que usuario está activo
+        if not user.activo:
+            raise serializers.ValidationError("Usuario inactivo")
 
         user.ultimo_login = timezone.now()
         user.save()

@@ -66,6 +66,9 @@ class SecurityHeadersMiddleware:
             'payment=(), usb=()'
         )
         
+        # 🔒 Cross-Origin-Opener-Policy: permite que popups (Google OAuth) se cierren correctamente
+        response['Cross-Origin-Opener-Policy'] = 'same-origin-allow-popups'
+        
         # 🔒 HSTS (HTTP Strict Transport Security)
         # Fuerza HTTPS en futuras conexiones (máximo 1 año)
         response['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'

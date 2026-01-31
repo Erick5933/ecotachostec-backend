@@ -1,11 +1,20 @@
 from pathlib import Path
 import os
-import pymysql
 from dotenv import load_dotenv
 from core.middleware import whitenoise_add_headers
 
 # Cargar variables de entorno desde .env
 load_dotenv(os.path.join(Path(__file__).resolve().parent, '.env'))
+
+# PRIMERO: Parchear PyMySQL ANTES de que Django lo importe
+import pymysql
+pymysql.install_as_MySQLdb()
+
+# Parchear el check de versión ANTES de importar Django DB
+import sys
+if 'django.db.backends.mysql' not in sys.modules:
+    import MySQLdb
+    MySQLdb.__version__ = '2.2.4'
 
 # -------------------- CONFIGURACIÓN BASE --------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -18,9 +27,6 @@ ALLOWED_HOSTS = ['*']
 
 # 🔒 Ocultar información de versión de Django
 DJANGO_SETTINGS_MODULE = 'ecotachostec_backend.settings'
-
-# Habilitar PyMySQL como reemplazo de MySQLdb
-pymysql.install_as_MySQLdb()
 
 # -------------------- APLICACIONES --------------------
 INSTALLED_APPS = [
@@ -133,18 +139,21 @@ WSGI_APPLICATION = 'ecotachostec_backend.wsgi.application'
 ASGI_APPLICATION = 'ecotachostec_backend.asgi.application'
 
 
-# -------------------- BASE DE DATOS (MySQL Workbench) --------------------
+# -------------------- BASE DE DATOS (MySQL) --------------------
+# Configurar para usar MySQL por defecto con PyMySQL
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.mysql'),
+        'ENGINE': 'django.db.backends.mysql',
         'NAME': os.getenv('DB_NAME', 'ecotachostec_db'),
         'USER': os.getenv('DB_USER', 'Frosdh'),
         'PASSWORD': os.getenv('DB_PASSWORD', 'blancoss'),
         'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '3306'),
+        'PORT': int(os.getenv('DB_PORT', '3306')),
         'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'"
-        }
+            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+            'charset': 'utf8mb4',
+        },
+        'ATOMIC_REQUESTS': True,
     }
 }
 
