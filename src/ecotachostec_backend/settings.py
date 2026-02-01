@@ -77,8 +77,14 @@ else:
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        # Producción
+        "https://ecotachoste.me",
+        "https://www.ecotachoste.me",
+        "http://ecotachoste.me",
     ]
 
 # Métodos HTTP permitidos en CORS
@@ -110,8 +116,14 @@ CSRF_TRUSTED_ORIGINS = [
     'http://127.0.0.1:5173',
     'http://localhost:5174',
     'http://127.0.0.1:5174',
+    'http://localhost:5175',
+    'http://127.0.0.1:5175',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    # Producción
+    'https://ecotachoste.me',
+    'https://www.ecotachoste.me',
+    'http://ecotachoste.me',
 ]
 
 ROOT_URLCONF = 'ecotachostec_backend.urls'
@@ -202,7 +214,7 @@ WHITENOISE_ADD_HEADERS_FUNCTION = whitenoise_add_headers
 
 # -------------------- MEDIA (IMÁGENES) --------------------
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = BASE_DIR / 'detecciones'
 
 # -------------------- SEGURIDAD HTTP --------------------
 # Fuerza HTTPS en producción
@@ -236,7 +248,7 @@ EMAIL_HOST_PASSWORD = 'bvgt qcgi onro ikgc'
 DEFAULT_FROM_EMAIL = 'Ecotachos Tecnología <kawsana375@gmail.com>'
 
 # URL del Frontend (para enviar el link de recuperación)
-FRONTEND_URL = os.getenv('FRONTEND_URL', "http://localhost:5174")  # O tu IP si usas expo
+FRONTEND_URL = os.getenv('FRONTEND_URL', "https://ecotachoste.me")  # dominio público por defecto
 
 # -------------------- IP WHITELIST (opcional) --------------------
 # Lista de IPs confiables separadas por coma (ej: "127.0.0.1,192.168.1.10")
