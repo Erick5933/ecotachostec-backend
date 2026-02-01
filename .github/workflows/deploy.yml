@@ -42,10 +42,7 @@ jobs:
             
             echo "📊 Container status:"
             docker-compose ps
-            
-            echo "🧹 Cleaning up..."
-            docker image prune -f
-            
+          
             echo "✅ Deployment completed!"
 
       - name: Show logs
