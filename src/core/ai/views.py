@@ -15,35 +15,35 @@ from django.core.files.base import ContentFile
 from core.models.tacho_models import Tacho
 from core.models.deteccion_models import Deteccion
 
-from .local_classifier import LocalClassifier
+#from .local_classifier import LocalClassifier
 
 logger = logging.getLogger(__name__)
+# Agrega esto cerca del inicio de views.py, después de las importaciones
+
 def resolve_weights_path() -> str:
-    """Resuelve la ruta del modelo .pt.
+    """Función dummy para compatibilidad - No usamos local classifier"""
+    return ""
 
-    1) Usa AI_WEIGHTS del entorno si existe.
-    2) Busca automáticamente en <repo_root>/runs/classify/**/weights/best.pt y retorna el más reciente.
-    """
-    if AI_ENGINE != 'local':
-        return ''
-
-    if AI_WEIGHTS and os.path.exists(AI_WEIGHTS):
-        return AI_WEIGHTS
-
-    try:
-        repo_root = Path(__file__).resolve().parents[3]  # .../ecotachostec-backend2
-        candidates = list(repo_root.glob('runs/classify/**/weights/best.pt'))
-        if not candidates:
-            return ''
-        # elegir el más reciente por mtime
-        latest = max(candidates, key=lambda p: p.stat().st_mtime)
-        return str(latest)
-    except Exception:
-        return ''
-
+CATEGORY_INFO = {
+    "organico": {
+        "label": "ORGÁNICO", "icon": "🌱", "color": "#10b981", "bgColor": "#d1fae5",
+        "description": "Residuo orgánico - Depositar en contenedor verde",
+        "examples": "Restos de comida, cáscaras, residuos vegetales"
+    },
+    "reciclable": {
+        "label": "RECICLABLE", "icon": "♻️", "color": "#3b82f6", "bgColor": "#dbeafe",
+        "description": "Material reciclable - Depositar en contenedor azul",
+        "examples": "Plástico, papel, cartón, vidrio, metal"
+    },
+    "inorganico": {
+        "label": "INORGÁNICO", "icon": "🗑️", "color": "#6b7280", "bgColor": "#f3f4f6",
+        "description": "Residuo no reciclable - Depositar en contenedor gris",
+        "examples": "Residuos no reciclables, desechos diversos"
+    }
+}
 
 # ==================== CONFIGURACIÓN IA ====================
-AI_ENGINE = os.getenv('AI_ENGINE', 'local').lower()  # 'roboflow' | 'local'
+AI_ENGINE = os.getenv('AI_ENGINE', 'roboflow').lower()  # 'roboflow' | 'local'
 AI_WEIGHTS = os.getenv('AI_WEIGHTS', '').strip()  # Ruta a pesos locales (.pt) si AI_ENGINE='local'
 
 # ==================== CONFIGURACIÓN ROBOFLOW ====================
