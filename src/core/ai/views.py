@@ -11,6 +11,9 @@ import io
 import requests
 import os
 from pathlib import Path
+from django.core.files.base import ContentFile
+from core.models.tacho_models import Tacho
+from core.models.deteccion_models import Deteccion
 
 from .local_classifier import LocalClassifier
 
@@ -45,10 +48,12 @@ AI_WEIGHTS = os.getenv('AI_WEIGHTS', '').strip()  # Ruta a pesos locales (.pt) s
 
 # ==================== CONFIGURACIÓN ROBOFLOW ====================
 ROBOFLOW_CONFIG = {
-    'api_url': 'https://serverless.roboflow.com',
-    'api_key': 'T02OsUf25gIOG7id3A9r',
-    'workspace': 'frosdh',
-    'workflow_id': 'find-inorganicos-reciclables-and-organicos-2'
+    'api_url': os.getenv('ROBOFLOW_API_URL', 'https://serverless.roboflow.com'),
+    'api_key': os.getenv('ROBOFLOW_API_KEY', 'T02OsUf25gIOG7id3A9r'),
+    'workspace': os.getenv('ROBOFLOW_WORKSPACE', 'frosdh'),
+    'workflow_id': os.getenv('ROBOFLOW_WORKFLOW_ID', ''),
+    # Fallback por modelo directo (formato: <project>/<version>)
+    'model_id': os.getenv('ROBOFLOW_MODEL_ID', 'ia-final-uof7b/3')
 }
 
 CATEGORY_INFO = {
@@ -75,34 +80,52 @@ def detect_with_roboflow(image_base64):
     Llama al workflow de Roboflow con la imagen en base64
     """
     try:
-        url = f"{ROBOFLOW_CONFIG['api_url']}/{ROBOFLOW_CONFIG['workspace']}/workflows/{ROBOFLOW_CONFIG['workflow_id']}"
-        
-        payload = {
-            "api_key": ROBOFLOW_CONFIG['api_key'],
-            "inputs": {
-                "image": {
-                    "type": "base64",
-                    "value": image_base64
+        # 1) Intento por Workflow si hay workflow_id
+        if ROBOFLOW_CONFIG.get('workflow_id'):
+            url = f"{ROBOFLOW_CONFIG['api_url']}/{ROBOFLOW_CONFIG['workspace']}/workflows/{ROBOFLOW_CONFIG['workflow_id']}"
+            payload = {
+                "api_key": ROBOFLOW_CONFIG['api_key'],
+                "inputs": {
+                    "image": {
+                        "type": "base64",
+                        "value": image_base64
+                    }
                 }
             }
-        }
+            headers = {"Content-Type": "application/json"}
+            logger.info(f"🚀 Llamando a Roboflow workflow: {ROBOFLOW_CONFIG['workflow_id']}")
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            logger.info(f"📡 Status Code de Roboflow (workflow): {response.status_code}")
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"✅ Respuesta de Roboflow (workflow) recibida")
+                return result
+            else:
+                logger.error(f"❌ Roboflow workflow error {response.status_code}: {response.text}")
+                # Continuar a fallback por modelo
         
-        headers = {"Content-Type": "application/json"}
-        
-        logger.info(f"🚀 Llamando a Roboflow workflow: {ROBOFLOW_CONFIG['workflow_id']}")
-        
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        
-        logger.info(f"📡 Status Code de Roboflow: {response.status_code}")
-        
+        # 2) Fallback por modelo directo (detect.roboflow.com)
+        model_id = ROBOFLOW_CONFIG.get('model_id')
+        if not model_id:
+            return {"success": False, "error": "Modelo Roboflow no configurado (ROBOFLOW_MODEL_ID)"}
+        url = f"https://detect.roboflow.com/{model_id}?api_key={ROBOFLOW_CONFIG['api_key']}"
+        image_bytes = base64.b64decode(image_base64)
+        files = { 'file': ('image.jpg', image_bytes, 'image/jpeg') }
+        logger.info(f"🚀 Llamando a Roboflow detect model: {model_id}")
+        response = requests.post(url, files=files, timeout=30)
+        logger.info(f"📡 Status Code de Roboflow (model): {response.status_code}")
         if response.status_code != 200:
-            logger.error(f"❌ Roboflow error {response.status_code}: {response.text}")
-            return None
-            
+            return {
+                "success": False,
+                "error": "Roboflow detect devolvió un estado no exitoso",
+                "status_code": response.status_code,
+                "response": response.text
+            }
+        # Adaptar formato a lo que espera process_roboflow_response
         result = response.json()
-        logger.info(f"✅ Respuesta de Roboflow recibida")
-        
-        return result
+        wrapped = { "outputs": [ { "predictions": result.get('predictions', []) } ] }
+        logger.info("✅ Respuesta de Roboflow (model) recibida y adaptada")
+        return wrapped
         
     except requests.exceptions.Timeout:
         logger.error("⏰ Timeout al conectar con Roboflow")
@@ -347,7 +370,7 @@ def ai_detect(request):
                 "error": "No se envió imagen. Enviar archivo en 'imagen' o base64"
             }, status=400)
 
-        # 3️⃣ Convertir imagen a base64 para Roboflow
+        # 3️⃣ Convertir imagen a base64 para IA
         try:
             img_pil = Image.open(imagen).convert('RGB')
             buffered = io.BytesIO()
@@ -361,32 +384,72 @@ def ai_detect(request):
                 "error": f"Error procesando imagen: {str(e)}"
             }, status=400)
 
-        # Motor local SIEMPRE (reemplazo definitivo)
-        weights_path = resolve_weights_path()
-        if not weights_path or not os.path.exists(weights_path):
-            return Response({
-                "success": False,
-                "error": "Pesos locales no configurados. Defina AI_WEIGHTS en el entorno."
-            }, status=500)
+        # 4️⃣ Ejecutar IA según AI_ENGINE
+        if AI_ENGINE == 'roboflow':
+            rf_result = detect_with_roboflow(img_base64)
+            if isinstance(rf_result, dict) and rf_result.get("success") is False:
+                return Response(rf_result, status=502)
+            if not rf_result:
+                return Response({"success": False, "error": "Roboflow no respondió"}, status=502)
+            processed = process_roboflow_response(rf_result)
+            if not processed.get("success"):
+                return Response(processed, status=200)
+            categoria_std = processed["clasificacion_principal"]["categoria"]
+            confianza = processed["clasificacion_principal"]["confianza"]
+            top_pred = processed.get("top_predicciones", [])
+            category_info = processed.get("category_info", CATEGORY_INFO.get(categoria_std, CATEGORY_INFO["inorganico"]))
+            tipo = "clasificacion-roboflow"
+        else:
+            weights_path = resolve_weights_path()
+            if not weights_path or not os.path.exists(weights_path):
+                return Response({
+                    "success": False,
+                    "error": "Pesos locales no configurados. Defina AI_WEIGHTS en el entorno."
+                }, status=500)
+            clf = LocalClassifier(weights_path)
+            img_pil = Image.open(io.BytesIO(base64.b64decode(img_base64))).convert('RGB')
+            pred = clf.predict_pil(img_pil)
+            categoria = pred['label']
+            confianza = pred['confidence']
+            categoria_map = {
+                "organicos": "organico",
+                "orgánico": "organico",
+                "organico": "organico",
+                "reciclables": "reciclable",
+                "reciclable": "reciclable",
+                "inorganicos": "inorganico",
+                "inorgánicos": "inorganico",
+                "inorganico": "inorganico",
+            }
+            categoria_std = categoria_map.get(categoria.lower(), categoria.lower())
+            top_pred = pred.get("top", [])
+            category_info = CATEGORY_INFO.get(categoria_std, CATEGORY_INFO["inorganico"]) 
+            tipo = "clasificacion-local"
 
-        clf = LocalClassifier(weights_path)
-        img_pil = Image.open(io.BytesIO(base64.b64decode(img_base64))).convert('RGB')
-        pred = clf.predict_pil(img_pil)
-        categoria = pred['label']
-        confianza = pred['confidence']
-
-        categoria_map = {
-            "organicos": "organico",
-            "orgánico": "organico",
-            "organico": "organico",
-            "reciclables": "reciclable",
-            "reciclable": "reciclable",
-            "inorganicos": "inorganico",
-            "inorgánicos": "inorganico",
-            "inorganico": "inorganico",
-        }
-        categoria_std = categoria_map.get(categoria.lower(), categoria.lower())
-        category_info = CATEGORY_INFO.get(categoria_std, CATEGORY_INFO["inorganico"])
+        # 5️⃣ Guardar en Deteccion si viene tacho_id
+        detection_id = None
+        tacho_id = request.data.get("tacho_id")
+        if tacho_id:
+            tacho = Tacho.objects.filter(id=tacho_id).first()
+            if tacho:
+                lat = getattr(tacho, 'latitud', 0.0) or 0.0
+                lon = getattr(tacho, 'longitud', 0.0) or 0.0
+                try:
+                    det = Deteccion(
+                        tacho=tacho,
+                        clasificacion=categoria_std,
+                        ubicacion_lat=lat,
+                        ubicacion_lon=lon,
+                        confianza_ia=confianza,
+                        activo=True,
+                        procesado=True,
+                    )
+                    # Guardar imagen a archivo
+                    fname = f"det_{tacho_id}_{timezone.now().strftime('%Y%m%d%H%M%S')}.jpg"
+                    det.imagen.save(fname, ContentFile(base64.b64decode(img_base64)), save=True)
+                    detection_id = det.id
+                except Exception as e:
+                    logger.exception(f"Error guardando Deteccion: {str(e)}")
 
         return Response({
             "success": True,
@@ -395,8 +458,9 @@ def ai_detect(request):
                 "confianza": confianza
             },
             "category_info": category_info,
-            "top_predicciones": pred["top"],
-            "tipo": "clasificacion-local"
+            "top_predicciones": top_pred,
+            "tipo": tipo,
+            "deteccion_id": detection_id
         })
 
     except Exception as e:

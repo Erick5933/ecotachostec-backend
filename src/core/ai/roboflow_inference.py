@@ -9,7 +9,7 @@ client = InferenceHTTPClient(
 # Ejecutar workflow
 result = client.run_workflow(
     workspace_name="frosdh",
-    workflow_id="find-inorganicos-reciclables-and-organicos-2",
+    workflow_id="ia-final-uof7b",
     images={
         "image": "mi_imagen.jpg"  # Reemplaza con tu imagen
     },
