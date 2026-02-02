@@ -21,3 +21,4 @@ django-celery-beat
 django-celery-results
 paho-mqtt
 firebase-admin
+roboflow
