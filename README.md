@@ -1,6 +1,6 @@
 # EcoTachosTec — Backend
 
-> AI-powered smart waste classification system. An IoT platform that uses computer vision (YOLOv8) to automatically classify waste in real time and physically direct it to the correct container via ESP32-controlled servomotors.
+> AI-powered smart waste classification system. An IoT platform that uses computer vision (YOLOv8) to automatically classify waste in real time and physically direct it to the correct container via ESP32-controlled servomotors. 
 
 ---
 
